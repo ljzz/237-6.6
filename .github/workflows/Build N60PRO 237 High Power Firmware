@@ -1,0 +1,48 @@
+name: Build N60PRO 237 High Power Firmware
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发编译
+
+env:
+  # 核心修改：设备名改为下划线格式
+  DEVICE: "netcore_n60_pro"
+  TARGET: "mediatek"
+  SUBTARGET: "mt7986a"
+
+jobs:
+  build-firmware:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 拉取源码
+        uses: actions/checkout@v4
+        with:
+          repository: 237176253/openwrt  # 237的源码仓库
+          ref: main  # 对应分支
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt update && sudo apt install -y build-essential libncurses5-dev libncursesw5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc wget unzip python3 coreutils
+          # 验证env命令
+          env --version
+
+      - name: 配置设备与高功率补丁
+        run: |
+          cd openwrt
+          # 加载N60PRO的默认配置（下划线格式）
+          cp configs/${{ env.TARGET }}/${{ env.SUBTARGET }}_${{ env.DEVICE }}_defconfig .config
+          # 应用高功率补丁（如果有）
+          patch -p1 < ../patches/high-power-mt7986.patch
+          # 更新feeds
+          ./scripts/feeds update -a && ./scripts/feeds install -a
+
+      - name: 编译固件
+        run: |
+          cd openwrt
+          make -j$(nproc) V=s  # V=s显示详细日志，便于排查剩余错误
+
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: n60pro-237-highpower-firmware
+          path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
