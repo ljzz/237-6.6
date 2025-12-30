@@ -41,25 +41,43 @@ jobs:
           cd openwrt
           make -j$(nproc) V=s  # V=s显示详细日志，便于排查剩余错误
 
-      - name: 上传编译产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: n60pro-237-highpower-firmware
-          path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
 
-    - name: 编译完成通知
-      if: success()
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "========================================"
-        echo "🎉 N60 Pro固件编译成功!"
-        echo "========================================"
-        echo "固件信息:"
-        echo "- 文件名: ${{ steps.find_firmware.outputs.firmware_name }}"
-        echo "- 文件大小: ${{ steps.find_firmware.outputs.firmware_size }}"
-        echo "- 源码版本: ${{ env.COMMIT_HASH }} (${{ env.COMMIT_DATE }})"
-        echo ""
-        echo "固件已发布到:"
-        echo "https://github.com/${{ github.repository }}/releases/tag/${{ github.event.inputs.tag_name || 'v1.0.0' }}"
-        echo ""
-        echo "📋 配置文件已保存在仓库中"
-        echo "========================================"
+        echo "release_tag=$(date +"%Y.%m.%d-%H%M")-${{ env.FIRMWARE_TAG }}" >> $GITHUB_OUTPUT
+        touch release.txt
+        [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@master
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        retain_days: 0
+        keep_minimum_runs: 2
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@master
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 6
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
