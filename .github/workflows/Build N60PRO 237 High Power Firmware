@@ -46,3 +46,20 @@ jobs:
         with:
           name: n60pro-237-highpower-firmware
           path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
+
+    - name: 编译完成通知
+      if: success()
+      run: |
+        echo "========================================"
+        echo "🎉 N60 Pro固件编译成功!"
+        echo "========================================"
+        echo "固件信息:"
+        echo "- 文件名: ${{ steps.find_firmware.outputs.firmware_name }}"
+        echo "- 文件大小: ${{ steps.find_firmware.outputs.firmware_size }}"
+        echo "- 源码版本: ${{ env.COMMIT_HASH }} (${{ env.COMMIT_DATE }})"
+        echo ""
+        echo "固件已发布到:"
+        echo "https://github.com/${{ github.repository }}/releases/tag/${{ github.event.inputs.tag_name || 'v1.0.0' }}"
+        echo ""
+        echo "📋 配置文件已保存在仓库中"
+        echo "========================================"
